@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="us">
+<head>
+	<meta charset="utf-8">
+	<title>Welcome to NoteNow</title>
+	<link rel="stylesheet" href="stylesheets/jquery-ui.css">
+	<link rel="stylesheet" type="text/css" href="stylesheets/autocomplete_styles/auto_list.css">
+	<style>
+			textarea {
+				border:2px solid #ccc;
+				padding: 10px;
+				vertical-align: top;
+				width: 25%;
+			}
+
+			.animated {
+				-webkit-transition: height 0.2s;
+				-moz-transition: height 0.2s;
+				transition: height 0.2s;
+			}
+
+	</style>
+	<link rel="stylesheet" href="stylesheets/jquery.tag-editor.css">
+</head>
+<body>
+<h1>Welcome to NoteNow</h1>
+<div id="container">
+	<h1>Topic Tags</h1>
+	<textarea id="topictags" hint="Enter Topic Tags Here"></textarea>
+	<h1>Note Editor</h1>
+	<textarea id="userInput" class="animated"></textarea>
+</div>
+
+<script src="javascripts/jquery.js"></script>
+<script src="javascripts/jquery-migrate-1.2.1.min.js"></script>
+<script src="javascripts/jquery-ui.min.js"></script>
+
+<!-- Code For Retrieving Realtime NLP Analysis -->
+<script src="https://cdn.socket.io/socket.io-1.2.1.js"></script>
+<script>
+	var socket = io.connect('/nlpstream');
+</script>
+
+<!-- Code for Tag Editor -->
+<script type="text/javascript" src="javascripts/jquery.tag-editor.min.js"></script>
+<script type="text/javascript">
+	$("#topictags").tagEditor({
+		initialTags: [],
+		beforeTagSave: function (field, editor, tags, tag, val) {
+			if (tag != "") {
+				// User is editing an existing tag
+				console.log("tag = " + tag);
+			} else {
+				// val has new tag being added
+				socket.emit('newtag', {"tag": val});
+				console.log("val = " + val);
+			}
+		}
+	});
+</script>
+
+<!-- Code for autocompletion -->
+<script type="text/javascript" src="javascripts/datastructures/trie.js"></script>
+<script type="text/javascript" src="javascripts/auto.js"></script> <!-- auto.js does autocompletion -->
+<script type="text/javascript">
+	// Usage documentation here: http://www.amirharel.com/2011/03/07/implementing-autocomplete-jquery-plugin-for-textarea/
+	var trie = new Trie();
+
+	$("#userInput").autocomplete({
+			wordCount:1,
+			on: {
+				query: function(text,cb){
+					var matches = trie.findMatches(text)
+					cb(matches);								
+				},
+				selected: function(selectedText) {
+					trie.incrementWord(selectedText);
+					socket.emit('selected', {"tag": selectedText});
+				}
+			}
+	});
+</script>
+
+<!-- Code for receiving new suggestions -->
+<script>
+	socket.on('suggestion', function(data) {
+		var suggestions = data.suggestions;
+		console.log('Got ' + suggestions.length + ' new suggestions');
+		for(var i=0; i < suggestions.length; i++) // Add all suggested words to trie
+			trie.addWord(suggestions[i]);
+	});
+</script>
+
+<!-- Code for textarea autosizing -->
+<script src="javascripts/jquery.autosize.min.js"></script>
+<script>
+	$(function(){
+		$('.animated').autosize();
+	});
+</script>
+
+</body>
+
+</html>
