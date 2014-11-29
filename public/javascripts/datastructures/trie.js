@@ -1,3 +1,4 @@
+var MIN_PRUNE_THRESH = 3;
 
 var TrieNode = function(character, wordEnd) {
 
@@ -9,13 +10,13 @@ var TrieNode = function(character, wordEnd) {
 
 	TrieNode.prototype.addWord = function(word) {
 		if (word.length == 0)
-			return; // Word was already added to trie
+			return false; // Word was already added to trie
 
 		for (var i = 0; i < this.children.length; i++) {
 			var child = this.children[i];
 			if (child.character == word[0]) {
-				child.addWord(word.substr(1));
-				return;
+				var isNewWord = child.addWord(word.substr(1));
+				return isNewWord;
 			}
 		}
 
@@ -23,6 +24,7 @@ var TrieNode = function(character, wordEnd) {
 		var newChild = new TrieNode(word[0], word.length == 1);
 		this.children.push(newChild);
 		newChild.addWord(word.substr(1)); // Need to fill out rest of this branch
+		return true; // Added a new Word
 	};
 
 	TrieNode.prototype.prefixMatches = function(prefix) {
@@ -65,8 +67,10 @@ var TrieNode = function(character, wordEnd) {
 	};
 
 	TrieNode.prototype.incrementWord = function(word) {
-		if(word.length == 0)
-			return;
+		if(word.length == 0) {
+			this.wordEnd = true;
+			return this.useCount;
+		}
 		for(var i=0; i < this.children.length; i++) {
 			if(word[0] == this.children[i].character) {
 				var child = this.children[i];
@@ -74,28 +78,71 @@ var TrieNode = function(character, wordEnd) {
 				this.children.sort(function(childA, childB) {
 					return childB.useCount - childA.useCount;
 				});
-				child.incrementWord(word.substr(1));
-				return;
+				var wordUseCount = child.incrementWord(word.substr(1));
+				return wordUseCount;
 			}
 		}
+
+		return 0; // Didn't find given word in trie
+	};
+
+	TrieNode.prototype.prune = function(word, pruneThresh) {
+		for (var i = 0; i < this.children.length; i++) {
+			var child = this.children[i];
+			if (child.character == word[0]) {
+				child.useCount--;
+				if (word.length == 1) {
+					var mustDelete = (child.useCount <= pruneThresh) && (child.children.length == 0) && child.wordEnd;
+					if (mustDelete)
+						this.children.splice(i,1); // remove index i from array
+					return {
+						deletedWord: mustDelete,
+						deletedChild: mustDelete
+					};
+				} else {
+					var deleteds = child.prune(word.substr(1), pruneThresh);
+					//  mustDelete if it has no more children and it isn't the ending to another word
+					var mustDelete = deleteds.deletedChild && child.children.length == 0 && !child.wordEnd;
+					if (mustDelete)
+						this.children.splice(i,1); // remove index i from array
+					deleteds.deletedChild = mustDelete;
+					return deleteds;
+				}
+			}
+		};
+
+		return false; // Couldn't find word in trie ... odd
 	};
 
 };
 
 var Trie = function() {
-
 	this.root = new TrieNode("", false); // Sentinel Root Node
+	this.numWords = 0;
 
 	Trie.prototype.findMatches = function(prefix) {
 		return this.root.prefixMatches(prefix);
 	};
 
 	Trie.prototype.addWord = function(word) {
-		this.root.addWord(word);
+		var newWord = this.root.addWord(word);
+		if (newWord)
+			this.numWords++;
 	};
 
 	Trie.prototype.incrementWord = function(word) {
 		this.root.incrementWord(word);
+	};
+
+	Trie.prototype.prune = function(word) {
+		var deleteds = this.root.prune(word, MIN_PRUNE_THRESH);
+		if(deleteds.deletedWord)
+			this.numWords--;
+		return deleteds.deletedWord;
+	};
+
+	Trie.prototype.getNumWords = function() {
+		return this.numWords;
 	};
 
 };

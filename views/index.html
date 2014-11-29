@@ -59,12 +59,15 @@
 	});
 </script>
 
-<!-- Code for autocompletion -->
+<!-- Code for autocompletion & Trie Pruning Timeouts -->
 <script type="text/javascript" src="javascripts/datastructures/trie.js"></script>
 <script type="text/javascript" src="javascripts/auto.js"></script> <!-- auto.js does autocompletion -->
 <script type="text/javascript">
 	// Usage documentation here: http://www.amirharel.com/2011/03/07/implementing-autocomplete-jquery-plugin-for-textarea/
 	var trie = new Trie();
+	var currTimeWeight = 0.25;
+	var timeOut = 60000; // Prune Trie initially every 60 Seconds
+	var selectedTimestamp = new Date().getTime();
 
 	$("#userInput").autocomplete({
 			wordCount:1,
@@ -74,11 +77,36 @@
 					cb(matches);								
 				},
 				selected: function(selectedText) {
+					// Increment useCount of selectedText
 					trie.incrementWord(selectedText);
 					socket.emit('selected', {"tag": selectedText});
+					// Set pruning timeout
+					var currTime = new Date().getTime();
+					timeOut = (currTimeWeight*(currTime - selectedTimestamp)) + ((1.0-currTimeWeight)*timeOut);
 				}
 			}
 	});
+</script>
+
+<!-- Code for Pruning Trie -->
+<script type="text/javascript">
+	function periodicPrune(array) {
+		var refreshID = setInterval(function() {
+			if (array.length == 0 || trie.getNumWords() == 0)
+				clearInterval(refreshID);
+			else {
+				var deleteCount = 0;
+				for (var i = 0; i < array.length; i++) {
+					var deleted = trie.prune(array[i]); // return true if pruned the word
+					if (deleted) {
+						array.splice(i, 1); // Remove from array
+						deleteCount++;
+					}
+				};
+				console.log("Deleted " + deleteCount + " words\tWord Count: " + trie.getNumWords());
+			}
+		}, timeOut);
+	}
 </script>
 
 <!-- Code for receiving new suggestions -->
@@ -88,6 +116,7 @@
 		console.log('Got ' + suggestions.length + ' new suggestions');
 		for(var i=0; i < suggestions.length; i++) // Add all suggested words to trie
 			trie.addWord(suggestions[i]);
+		periodicPrune(suggestions); // Periodically prune out these suggestions
 	});
 </script>
 
